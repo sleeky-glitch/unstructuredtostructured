@@ -1,77 +1,70 @@
 import streamlit as st
-import fitz  # PyMuPDF
-from PIL import Image
-import io
 import openai
+import fitz  # PyMuPDF
+import base64
+import io
 
-# Load OpenAI API key from Streamlit secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+openai.api_key = st.secrets["openai"]["api_key"]
 
-st.title("Unstructured to Structured PDF Bot")
+st.set_page_config(page_title="PDF Content Analyzer", page_icon="📄")
+st.title("📄 PDF Content Analyzer with GPT-4.1")
+st.write("Upload a PDF file. The AI will analyze each page image directly for content, extracting and analyzing text, sentiment, sources, and more.")
 
-uploaded_file = st.file_uploader("Upload a scanned PDF (non-selectable text)", type=["pdf"])
+uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
 
-output_format = st.selectbox("Select output format", ["Markdown", "JSON", "HTML", "Plaintext"])
+if uploaded_file is not None:
+    st.success(f"File uploaded: {uploaded_file.name}")
 
-if uploaded_file and output_format:
-    # Load PDF with PyMuPDF
-    pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-    num_pages = pdf_document.page_count
+    dpi = st.slider("Image DPI (higher = better quality, slower)", 150, 300, 200)
 
-    st.write(f"PDF loaded with {num_pages} pages.")
+    with st.spinner("Converting PDF pages to images..."):
+        pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+        images = []
+        for page_num in range(pdf_document.page_count):
+            page = pdf_document[page_num]
+            mat = fitz.Matrix(dpi / 72, dpi / 72)
+            pix = page.get_pixmap(matrix=mat)
+            img_bytes = pix.tobytes("png")
+            images.append((page_num + 1, img_bytes))
+        pdf_document.close()
 
-    # Function to convert PDF page to PNG image bytes
-    def get_page_image_bytes(page):
-        zoom = 2  # zoom factor for better resolution
-        mat = fitz.Matrix(zoom, zoom)
-        pix = page.get_pixmap(matrix=mat, alpha=False)
-        img_bytes = pix.tobytes("png")
-        return img_bytes
+    st.success(f"Converted {len(images)} pages to images.")
 
-    # Function to call OpenAI GPT-4.1 with image and prompt
-    def gpt4_1_extract_structured(image_bytes, page_num, output_fmt):
-        prompt = f"""
-You are an expert AI assistant. Extract the text content from the image of page {page_num} of a scanned PDF document. 
-Convert the extracted content into {output_fmt} format.
+    all_results = []
+    for page_num, img_bytes in images:
+        st.markdown(f"### Analyzing Page {page_num}")
+        image_data_url = f"data:image/png;base64,{base64.b64encode(img_bytes).decode()}"
 
-Instructions:
-- If JSON, output valid JSON only.
-- If Markdown, use appropriate Markdown syntax.
-- If HTML, output valid HTML markup.
-- If Plaintext, output clean readable text.
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4.1",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful assistant. Analyze the uploaded PDF page image for text content, "
+                            "Provide a summary of the extracted text, "
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": image_data_url}}
+                        ],
+                    },
+                ],
+                max_tokens=700,
+                temperature=0.2,
+            )
+            result = response.choices[0].message.content
+            st.markdown("**AI Analysis:**")
+            st.write(result)
+            all_results.append((page_num, result))
+        except Exception as e:
+            st.error(f"Error analyzing page {page_num}: {e}")
 
-Begin output below:
-"""
+else:
+    st.info("👆 Please upload a PDF file to get started.")
 
-        # NOTE: The following is a conceptual example of multimodal API usage.
-        # Adjust according to the actual OpenAI multimodal API specification.
-
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",  # Replace with your GPT-4.1 multimodal model name
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that extracts and structures text from images."},
-                {"role": "user", "content": prompt},
-            ],
-            files=[
-                {
-                    "name": "page.png",
-                    "data": image_bytes,
-                    "mime_type": "image/png"
-                }
-            ],
-        )
-        return response.choices[0].message.content.strip()
-
-    for i in range(num_pages):
-        page = pdf_document.load_page(i)
-        st.subheader(f"Page {i+1}")
-
-        img_bytes = get_page_image_bytes(page)
-        st.image(img_bytes, caption=f"Page {i+1} image", use_column_width=True)
-
-        with st.spinner(f"Processing page {i+1}..."):
-            try:
-                structured_output = gpt4_1_extract_structured(img_bytes, i+1, output_format)
-                st.code(structured_output, language=output_format.lower() if output_format != "Plaintext" else None)
-            except Exception as e:
-                st.error(f"Error processing page {i+1}: {e}")
+st.markdown("---")
+st.markdown("Made with ❤️ using Streamlit and OpenAI GPT-4.1")
