@@ -7,7 +7,7 @@ import openai
 # Load OpenAI API key from Streamlit secrets
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-st.title("Unstructured to Structured PDF Bot (GPT-4.1)")
+st.title("Unstructured to Structured PDF Bot")
 
 uploaded_file = st.file_uploader("Upload a scanned PDF (non-selectable text)", type=["pdf"])
 
