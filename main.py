@@ -7,7 +7,7 @@ import io
 openai.api_key = st.secrets["openai"]["api_key"]
 
 st.set_page_config(page_title="PDF Content Analyzer", page_icon="📄")
-st.title("📄 PDF Content Analyzer with GPT-4.1")
+st.title("📄 PDF Content Extractor (unstructured to structured)")
 st.write("Upload a PDF file. The AI will analyze each page image directly for content, extracting and analyzing text, sentiment, sources, and more.")
 
 uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
@@ -67,4 +67,4 @@ else:
     st.info("👆 Please upload a PDF file to get started.")
 
 st.markdown("---")
-st.markdown("Made with ❤️ using Streamlit and OpenAI GPT-4.1")
+st.markdown("Made with ❤️ by BSPL")
